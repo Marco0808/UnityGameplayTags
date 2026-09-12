@@ -2,7 +2,8 @@
     "name": "BandoWare.GameplayTags.Editor",
     "rootNamespace": "",
     "references": [
-        "BandoWare.GameplayTags"
+        "BandoWare.GameplayTags",
+        "MP.InspectorAttributes.Editor"
     ],
     "includePlatforms": [
         "Editor"
@@ -13,6 +14,12 @@
     "precompiledReferences": [],
     "autoReferenced": false,
     "defineConstraints": [],
-    "versionDefines": [],
+    "versionDefines": [
+        {
+            "name": "com.mp.inspector-attributes",
+            "expression": "",
+            "define": "MP_INSPECTOR_ATTRIBUTES"
+        }
+    ],
     "noEngineReferences": false
 }

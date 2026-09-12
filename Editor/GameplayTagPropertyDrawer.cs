@@ -1,50 +1,60 @@
-﻿using System.Collections.Generic;
-using System.Reflection;
-using UnityEditor;
-using UnityEditor.IMGUI.Controls;
-using UnityEngine;
+﻿using UnityEditor;
+using UnityEditor.UIElements;
+using UnityEngine.UIElements;
 
 namespace BandoWare.GameplayTags.Editor
 {
    [CustomPropertyDrawer(typeof(GameplayTag))]
+   [CustomPropertyDrawer(typeof(TypedGameplayTagBase), true)]
    public class GameplayTagPropertyDrawer : PropertyDrawer
    {
-      private static GUIContent s_TempContent = new();
-
-      public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
+      public override VisualElement CreatePropertyGUI(SerializedProperty property)
       {
-         label = EditorGUI.BeginProperty(position, label, property);
+         SerializedProperty nameProperty;
+         GameplayTagFilter tagFilter;
 
-         position = EditorGUI.PrefixLabel(position, label);
-
-         int oldIndentLevel = EditorGUI.indentLevel;
-         EditorGUI.indentLevel = 0;
-
-         SerializedProperty nameProperty = property.FindPropertyRelative("m_Name");
-         GameplayTag tag = GameplayTagManager.RequestTag(nameProperty.stringValue);
-
-         if (tag != GameplayTag.None)
+         // Wrapper TypedGameplayTag types specify tag filters directly via the type itself instead of via attribute
+         if (property.boxedValue is TypedGameplayTagBase typedGameplayTag)
          {
-            s_TempContent.text = tag.Name;
-            s_TempContent.tooltip = tag.Description;
+            nameProperty = property.FindPropertyRelative("tag.m_Name");
+            tagFilter = typedGameplayTag.GetTagFilter();
          }
          else
          {
-            s_TempContent.text = "Select...";
+            nameProperty = property.FindPropertyRelative("m_Name");
+            tagFilter = GameplayTagEditorUtility.GetTagFilterFromField(fieldInfo, property);
          }
 
-         if (EditorGUI.DropdownButton(position, s_TempContent, FocusType.Keyboard))
+         GameplayTagField field = new(preferredLabel, tagFilter)
          {
-            string[] filterTagNames = GameplayTagFilterAttribute.GetFilterTagNamesFromField(fieldInfo);
-            GameplayTagTreeView tagTreeView = new(new TreeViewState(), filterTagNames, property, static () =>
-            {
-               EditorWindow.GetWindow<PopupWindow>().Close();
-            });
-            tagTreeView.ShowPopupWindow(position);
+            value = GameplayTagManager.RequestTag(nameProperty.stringValue)
+         };
+
+#if MP_INSPECTOR_ATTRIBUTES
+         if (MP.InspectorAttributes.Editor.GraphToolkitGUIUtils.IsGraphProperty(property))
+         {
+            MP.InspectorAttributes.Editor.GraphToolkitGUIUtils.AddGraphFieldUssClasses(field);
+         }
+         else
+#endif
+         {
+            field.AddToClassList(GameplayTagField.alignedFieldUssClassName);
          }
 
-         EditorGUI.indentLevel = oldIndentLevel;
-         EditorGUI.EndProperty();
+         // Update serialized property, if the field changes
+         field.RegisterValueChangedCallback(evt =>
+         {
+            nameProperty.stringValue = evt.newValue.IsValid() ? evt.newValue.Name : null;
+            nameProperty.serializedObject.ApplyModifiedProperties();
+         });
+
+         // Update field if the serialized property changes
+         field.TrackPropertyValue(nameProperty, changedNameProperty =>
+         {
+            field.value = GameplayTagManager.RequestTag(changedNameProperty.stringValue);
+         });
+
+         return field;
       }
    }
 }
