@@ -53,7 +53,7 @@ namespace BandoWare.GameplayTags.Editor.Config
          win.ConfigData = configData;
          win.OriginalEntry = originalEntry;
          win.CloseAction = closeCallback;
-         win.ShowUtility();
+         win.ShowModalUtility();
       }
 
       ///////////////////////////// Private Functions //////////////////////////////

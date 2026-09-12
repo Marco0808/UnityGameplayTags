@@ -1,3 +1,4 @@
+using BandoWare.GameplayTags.Editor.GameplayTagAssets;
 using System;
 using System.IO;
 using System.Linq;
@@ -142,6 +143,11 @@ namespace BandoWare.GameplayTags.Editor.Config
       {
          EditorGUI.BeginChangeCheck();
 
+         if (GUILayout.Button("Create Gameplay Tags Asset", GUILayout.ExpandWidth(true)))
+         {
+            GameplayTagAssetsImporter.CreateGameplayTagsAssetFile();
+         }
+         
          using (new GUILayout.HorizontalScope())
          {
             configData.GeneratedClassPath = EditorGUILayout.TextField("Generated Class Path", configData.GeneratedClassPath);
