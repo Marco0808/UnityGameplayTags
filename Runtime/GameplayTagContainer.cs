@@ -180,7 +180,7 @@ namespace BandoWare.GameplayTags
       }
 #endif
       
-      public static GameplayTagContainer Empty { get; } = new();
+      public static readonly GameplayTagContainer Empty = new();
 
       /// <inheritdoc />
       public bool IsEmpty => m_Indices.IsEmpty;
