@@ -8,9 +8,26 @@ namespace BandoWare.GameplayTags
 {
    public static class GameplayTagManager
    {
-      private static Dictionary<string, GameplayTagDefinition> s_TagDefinitionsByName = new();
-      private static GameplayTagDefinition[] s_TagsDefinitions;
+      /// <summary>
+      /// All tag definitions (including parent-tags).
+      /// </summary>
+      private static GameplayTagDefinition[] s_TagDefinitions;
+
+      /// <summary>
+      /// All custom defined tags (including parent-tags, excluding the none-tag), cached for easy-access.
+      /// </summary>
       private static GameplayTag[] s_Tags;
+
+      /// <summary>
+      ///  Names of all defined tags (including parent-tags) pointing to their tag definition (for efficient hash-based access).
+      /// </summary>
+      private static Dictionary<string, GameplayTagDefinition> s_TagDefinitionsByName = new();
+
+      /// <summary>
+      /// Old names of all renamed tags, pointing to their currently valid tag definition (resolved potential chain of renames).
+      /// </summary>
+      private static Dictionary<string, GameplayTagDefinition> s_RenamedTagDefinitionsByOldName = new();
+
       private static bool s_IsInitialized;
 
       public static ReadOnlySpan<GameplayTag> GetAllTags()
@@ -20,13 +37,13 @@ namespace BandoWare.GameplayTags
       }
 
       /// <summary>
-      /// Returns all tags that are children of the given filterTag.
+      /// Returns all tags that are children from any of the given filterTagNames.
       /// </summary>
-      public static ReadOnlySpan<GameplayTag> GetAllTagsFiltered(GameplayTag filterTag)
+      public static ReadOnlySpan<GameplayTag> GetAllTagsFiltered(GameplayTagFilter tagFilter)
       {
          InitializeIfNeeded();
 
-         if (!filterTag.IsValid())
+         if (!tagFilter.HasFilterTags)
          {
             // No filters applied
             return new ReadOnlySpan<GameplayTag>(s_Tags);
@@ -36,8 +53,7 @@ namespace BandoWare.GameplayTags
 
          foreach (GameplayTag tag in s_Tags)
          {
-            // Only return the child tags of the filter tag names
-            if (tag.IsValid() && tag.IsChildOf(filterTag))
+            if (tagFilter.IncludesTag(tag))
             {
                filteredTags.Add(tag);
             }
@@ -46,78 +62,89 @@ namespace BandoWare.GameplayTags
          return new ReadOnlySpan<GameplayTag>(filteredTags.ToArray());
       }
 
-      /// <summary>
-      /// Returns all tags that are children from any of the given filterTagNames.
-      /// </summary>
-      public static ReadOnlySpan<GameplayTag> GetAllTagsFiltered(params string[] filterTagNames)
+      internal static IReadOnlyDictionary<string, GameplayTagDefinition> GetTagDefinitionsByName()
       {
          InitializeIfNeeded();
+         return s_TagDefinitionsByName;
+      }
 
-         if (filterTagNames == null || filterTagNames.Length == 0)
-         {
-            // No filters applied
-            return new ReadOnlySpan<GameplayTag>(s_Tags);
-         }
-
-         List<GameplayTag> filteredTags = new();
-
-         foreach (GameplayTag tag in s_Tags)
-         {
-            foreach (string filterTagName in filterTagNames)
-            {
-               // Only return the child tags of the filter tag names
-               if (tag.Name.StartsWith(filterTagName + '.'))
-               {
-                  filteredTags.Add(tag);
-                  break;
-               }
-            }
-         }
-
-         return new ReadOnlySpan<GameplayTag>(filteredTags.ToArray());
+      internal static IReadOnlyDictionary<string, GameplayTagDefinition> GetRenamedTagDefinitionsByOldName()
+      {
+         InitializeIfNeeded();
+         return s_RenamedTagDefinitionsByOldName;
       }
 
       internal static GameplayTagDefinition GetDefinitionFromRuntimeIndex(int runtimeIndex)
       {
          InitializeIfNeeded();
-         return s_TagsDefinitions[runtimeIndex];
+         return s_TagDefinitions[runtimeIndex];
       }
 
-      public static GameplayTag RequestTag(string name)
+      public static GameplayTag RequestTag(string tagName)
       {
-         if (string.IsNullOrEmpty(name))
+         if (string.IsNullOrEmpty(tagName))
          {
             return GameplayTag.None;
          }
 
-         if (!TryGetDefinition(name, out GameplayTagDefinition definition))
+         if (!TryGetDefinition(tagName, out GameplayTagDefinition definition))
          {
-            Debug.LogWarning($"No tag registered with name \"{name}\".");
+            Debug.LogWarning($"No tag registered with name \"{tagName}\".");
             return GameplayTag.None;
          }
 
          return definition.Tag;
       }
 
-      public static bool RequestTag(string name, out GameplayTag tag)
+      public static List<GameplayTag> RequestTagsByName(params string[] tagNames)
       {
-         if (TryGetDefinition(name, out GameplayTagDefinition definition))
+         List<GameplayTag> resultTags = new();
+
+         foreach (string tagName in tagNames)
          {
-            tag = definition.Tag;
-            return true;
+            GameplayTag tag = RequestTag(tagName);
+            if (tag.IsValid())
+            {
+               resultTags.Add(tag);
+            }
          }
 
-         tag = GameplayTag.None;
-         return false;
+         return resultTags;
       }
 
-      private static bool TryGetDefinition(string name, out GameplayTagDefinition definition)
+      public static List<GameplayTag> RequestTagsByType(params Type[] tagTypes)
+      {
+         List<GameplayTag> resultTags = new();
+
+         foreach (Type type in tagTypes)
+         {
+            // Access the GameplayTag name directly from the type (generated by the code generator), via reflection
+            MethodInfo method = type.GetMethod("Get", BindingFlags.Public | BindingFlags.Static);
+            if (method != null)
+            {
+               GameplayTag tag = (GameplayTag)method.Invoke(null, null);
+               if (tag.IsValid())
+               {
+                  resultTags.Add(tag);
+               }
+            }
+         }
+
+         return resultTags;
+      }
+
+      internal static bool IsTagForTestingOnly(string tagName)
+      {
+         return tagName.StartsWith("Test.") || tagName.Equals("Test");
+      }
+
+      private static bool TryGetDefinition(string tagName, out GameplayTagDefinition definition)
       {
          InitializeIfNeeded();
-         return s_TagDefinitionsByName.TryGetValue(name, out definition);
+         return s_TagDefinitionsByName.TryGetValue(tagName, out definition) || s_RenamedTagDefinitionsByOldName.TryGetValue(tagName, out definition);
       }
 
-      public static void InitializeIfNeeded()
+      private static void InitializeIfNeeded()
       {
          if (s_IsInitialized)
             return;
@@ -160,14 +187,15 @@ namespace BandoWare.GameplayTags
             }
          }
 
-         s_TagsDefinitions = context.GenerateDefinitions();
+         s_TagDefinitions = context.GenerateDefinitions();
 
          // Skip the first tag definition which is the "None" tag.
-         s_Tags = s_TagsDefinitions.Select(definition => definition.Tag).Skip(1).ToArray();
+         s_Tags = s_TagDefinitions.Select(definition => definition.Tag).Skip(1).ToArray();
 
-         foreach (GameplayTagDefinition definition in s_TagsDefinitions)
+         foreach (GameplayTagDefinition definition in s_TagDefinitions)
          {
             s_TagDefinitionsByName[definition.TagName] = definition;
+            // TODO: include weather renamed or not 
          }
 
          // Remap the OldTagNames registered via TagRenameEntries to point at the TagDefinition of the NewTagName.
@@ -175,13 +203,26 @@ namespace BandoWare.GameplayTags
          for (int i = tagRenameEntries.Count - 1; i >= 0; i--)
          {
             TagRenameEntry renameEntry = tagRenameEntries[i];
-            if (s_TagDefinitionsByName.TryGetValue(renameEntry.newTagName, out GameplayTagDefinition definition))
+
+            if (s_TagDefinitionsByName.ContainsKey(renameEntry.oldTagName))
             {
-               // Use TryAdd, so we don't accidentally override an already valid Tag to Definition mapping
-               if (!s_TagDefinitionsByName.TryAdd(renameEntry.oldTagName, definition))
+               // OldName appears to be valid again, as it is included in the currently-defined tags
+               continue;
+            }
+
+            // Resolve the renamed tag to its currently defined valid definition.
+            // The newName could either be found in the standard definitions, or is a chain of multiple previous renames,
+            // thus found in the RenamedTagDefinitions dictionary.
+            // (this is also the reason why we iterate the renames from newest to oldest) 
+            if (s_TagDefinitionsByName.TryGetValue(renameEntry.newTagName, out GameplayTagDefinition resolvedDefinition)
+                || s_RenamedTagDefinitionsByOldName.TryGetValue(renameEntry.newTagName, out resolvedDefinition))
+            {
+               // Use TryAdd, so we don't accidentally override an already valid renamed Tag to Definition mapping
+               if (!s_RenamedTagDefinitionsByOldName.TryAdd(renameEntry.oldTagName, resolvedDefinition)
+                   && s_RenamedTagDefinitionsByOldName[renameEntry.oldTagName] != resolvedDefinition)
                {
                   Debug.LogWarning($"Invalid TagRenameEntry detected: OldTagName '{renameEntry.oldTagName}' was be renamed " +
-                                   $"to '{renameEntry.newTagName}', but is already mapped to Definition of '{definition.TagName}'");
+                                   $"to '{renameEntry.newTagName}', but is already mapped to Definition of '{resolvedDefinition.TagName}'");
                }
             }
          }

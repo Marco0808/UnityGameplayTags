@@ -23,49 +23,59 @@ namespace BandoWare.GameplayTags
       }
 #endif
 
+      private const int k_RuntimeIndexUninitialized = -1;
+      private const int k_RuntimeIndexNone = 0;
+
       /// <summary>
       /// Represents an invalid tag.
       /// </summary>
-      public static readonly GameplayTag None = new() { m_RuntimeIndex = 0 };
+      public static readonly GameplayTag None = new() {m_RuntimeIndex = k_RuntimeIndexNone};
 
-      internal readonly int RuntimeIndex => m_RuntimeIndex;
+      internal int RuntimeIndex
+      {
+         get
+         {
+            InitializeIfNeeded();
+            return m_RuntimeIndex;
+         }
+      }
 
-      internal readonly GameplayTagDefinition Definition
+      internal GameplayTagDefinition Definition
       {
          get
          {
             ValidateIsNotNone();
-            return GameplayTagManager.GetDefinitionFromRuntimeIndex(m_RuntimeIndex);
+            return GameplayTagManager.GetDefinitionFromRuntimeIndex(RuntimeIndex);
          }
       }
 
       /// <inheritdoc cref="GameplayTagDefinition.ParentTags" />
       [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-      public readonly ReadOnlySpan<GameplayTag> ParentTags => Definition.ParentTags;
+      public ReadOnlySpan<GameplayTag> ParentTags => Definition.ParentTags;
 
       /// <inheritdoc cref="GameplayTagDefinition.ChildTags" />
       [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-      public readonly ReadOnlySpan<GameplayTag> ChildTags => Definition.ChildTags;
+      public ReadOnlySpan<GameplayTag> ChildTags => Definition.ChildTags;
 
       /// <inheritdoc cref="GameplayTagDefinition.HierarchyTags" />
       [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-      public readonly ReadOnlySpan<GameplayTag> HierarchyTags => Definition.HierarchyTags;
+      public ReadOnlySpan<GameplayTag> HierarchyTags => Definition.HierarchyTags;
 
       /// <inheritdoc cref="GameplayTagDefinition.Label" />
       [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-      public readonly string Label => Definition.Label;
+      public string Label => Definition.Label;
 
       /// <inheritdoc cref="GameplayTagDefinition.HierarchyLevel" />
       [DebuggerBrowsable(DebuggerBrowsableState.Never)]
-      public readonly int HierarchyLevel => Definition.HierarchyLevel;
+      public int HierarchyLevel => Definition.HierarchyLevel;
 
       /// <inheritdoc cref="GameplayTagDefinition.Description" />
-      public readonly string Description => Definition.Description;
+      public string Description => Definition.Description;
 
       /// <summary>
       /// The parent tag of this tag. If this tag is "A.B.C", the parent tag will be "A.B".
       /// </summary>
-      public readonly GameplayTag ParentTag
+      public GameplayTag ParentTag
       {
          get
          {
@@ -79,9 +89,9 @@ namespace BandoWare.GameplayTags
       }
 
       /// <inheritdoc cref="GameplayTagDefinition.Flags" />
-      public readonly GameplayTagFlags Flags => Definition.Flags;
+      public GameplayTagFlags Flags => Definition.Flags;
 
-      public readonly string Name
+      public string Name
       {
          get
          {
@@ -90,11 +100,9 @@ namespace BandoWare.GameplayTags
          }
       }
 
-      [DebuggerBrowsable(DebuggerBrowsableState.Never)]
       [SerializeField]
       private string m_Name;
 
-      [DebuggerBrowsable(DebuggerBrowsableState.Never)]
       private int m_RuntimeIndex;
 
       internal GameplayTag(string name, int runtimeTagIndex)
@@ -103,23 +111,23 @@ namespace BandoWare.GameplayTags
          m_RuntimeIndex = runtimeTagIndex;
       }
 
-      public readonly bool IsValid()
+      public bool IsValid()
       {
-         return m_RuntimeIndex != 0;
+         return RuntimeIndex != 0;
       }
 
       /// <summary>
       /// Tags match if they are equal or this tag is a child of the given tag.<br/>
       /// "A.B".MatchesTag("A") = true, "A".MatchesTag("A.B") = false.
       /// </summary>
-      public readonly bool MatchesTag(in GameplayTag tag)
+      public bool MatchesTag(in GameplayTag tag)
       {
          ValidateIsNotNone();
-         return m_RuntimeIndex == tag.m_RuntimeIndex || IsChildOf(tag);
+         return RuntimeIndex == tag.RuntimeIndex || IsChildOf(tag);
       }
 
       /// <inheritdoc cref="GameplayTagDefinition.IsParentOf(GameplayTag)"/>/>
-      public readonly bool IsParentOf(in GameplayTag tag)
+      public bool IsParentOf(in GameplayTag tag)
       {
          ValidateIsNotNone();
          return Definition.IsParentOf(tag);
@@ -127,21 +135,21 @@ namespace BandoWare.GameplayTags
 
 
       /// <inheritdoc cref="GameplayTagDefinition.IsChildOf(GameplayTag)"/>/>
-      public readonly bool IsChildOf(in GameplayTag parentTag)
+      public bool IsChildOf(in GameplayTag parentTag)
       {
          ValidateIsNotNone();
          return Definition.IsChildOf(parentTag);
       }
 
-      public readonly bool Equals(GameplayTag other)
+      public bool Equals(GameplayTag other)
       {
-         return m_RuntimeIndex == other.m_RuntimeIndex;
+         return RuntimeIndex == other.RuntimeIndex;
       }
 
-      public override readonly bool Equals(object obj)
+      public override bool Equals(object obj)
       {
          if (obj is GameplayTag other)
-            return other.m_RuntimeIndex == m_RuntimeIndex;
+            return other.RuntimeIndex == RuntimeIndex;
 
          if (obj is string otherStr)
             return m_Name == otherStr;
@@ -149,60 +157,61 @@ namespace BandoWare.GameplayTags
          return false;
       }
 
-      public override readonly int GetHashCode()
+      public override int GetHashCode()
       {
-         return m_RuntimeIndex;
+         return RuntimeIndex;
       }
 
-      public override readonly string ToString()
+      public override string ToString()
       {
-         if (m_RuntimeIndex == 0)
-            return "<None>";
-
-         return m_Name;
+         InitializeIfNeeded();
+         return m_Name ?? "<None>";
       }
 
       void ISerializationCallbackReceiver.OnBeforeSerialize()
       {
+         // This is used to apply any renaming when serializing the tag
          m_Name = SerializeToString(this);
       }
 
       void ISerializationCallbackReceiver.OnAfterDeserialize()
       {
-         this = DeserializeFromString(m_Name);
+         m_RuntimeIndex = k_RuntimeIndexUninitialized;
+         // Do not call "InitializeIfNeeded()" here, as it caused crashes when a SerializedProperty was being read
       }
 
-      public static string SerializeToString(GameplayTag tag)
+      internal static string SerializeToString(GameplayTag tag)
       {
-         if (tag.m_RuntimeIndex == 0)
+         if (tag.RuntimeIndex == 0)
          {
             return null;
          }
 
-         GameplayTagDefinition definition = GameplayTagManager.GetDefinitionFromRuntimeIndex(tag.m_RuntimeIndex);
+         GameplayTagDefinition definition = GameplayTagManager.GetDefinitionFromRuntimeIndex(tag.RuntimeIndex);
          return definition?.TagName;
       }
 
-      public static GameplayTag DeserializeFromString(string tagName)
+      internal static GameplayTag DeserializeFromString(string tagName)
       {
-         if (string.IsNullOrEmpty(tagName))
-         {
-            return None;
-         }
-
-         GameplayTag tag = GameplayTagManager.RequestTag(tagName);
-         if (tag == None)
-         {
-            UnityEngine.Debug.LogWarning($"[GameplayTag.DeserializeFromString] No tag registered with name \"{tagName}\".");
-            return None;
-         }
-
-         return tag;
+         return GameplayTagManager.RequestTag(tagName);
       }
 
-      private readonly void ValidateIsNotNone()
+      private void InitializeIfNeeded()
       {
-         if (m_RuntimeIndex == 0)
+         // If the RuntimeIndex is uninitialized, try to find its tag by name and set it.
+         // (should only happen when a tag was deserialized from disk)
+         if (m_RuntimeIndex == k_RuntimeIndexUninitialized)
+         {
+            GameplayTag tag = GameplayTagManager.RequestTag(m_Name);
+            m_RuntimeIndex = tag.m_RuntimeIndex;
+            m_Name = tag.m_Name;
+         }
+      }
+
+      [Conditional("DEBUG")]
+      private void ValidateIsNotNone()
+      {
+         if (RuntimeIndex == k_RuntimeIndexNone)
             throw new InvalidOperationException("Cannot perform operation on GameplayTag.None.");
       }
 
@@ -213,12 +222,12 @@ namespace BandoWare.GameplayTags
 
       public static bool operator ==(in GameplayTag lhs, in GameplayTag rhs)
       {
-         return lhs.m_RuntimeIndex == rhs.m_RuntimeIndex;
+         return lhs.RuntimeIndex == rhs.RuntimeIndex;
       }
 
       public static bool operator !=(in GameplayTag lhs, in GameplayTag rhs)
       {
-         return lhs.m_RuntimeIndex != rhs.m_RuntimeIndex;
+         return lhs.RuntimeIndex != rhs.RuntimeIndex;
       }
    }
 }

@@ -10,10 +10,10 @@ namespace BandoWare.GameplayTags
       public GameplayTagContainer RequiredTags => m_RequiredTags;
 
       [SerializeField]
-      private GameplayTagContainer m_ForbiddenTags;
+      private GameplayTagContainer m_RequiredTags;
 
       [SerializeField]
-      private GameplayTagContainer m_RequiredTags;
+      private GameplayTagContainer m_ForbiddenTags;
 
       public bool IsEmpty
       {
