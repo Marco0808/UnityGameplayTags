@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.IMGUI.Controls;
 using UnityEngine;
 
 namespace BandoWare.GameplayTags.Editor
 {
-   public class GameplayTagTreeViewItem : TreeViewItem
+   public class GameplayTagTreeViewItem : TreeViewItem<int>
    {
       public GameplayTag Tag => m_Tag;
 
@@ -30,14 +31,14 @@ namespace BandoWare.GameplayTags.Editor
       public bool IsEmpty => m_IsEmpty;
 
       private static Styles s_Styles;
-      private string[] m_FilterTagNames;
+      private GameplayTagFilter m_TagFilter;
       private SearchField m_SearchField;
       private bool m_IsEmpty;
 
-      public GameplayTagTreeViewBase(TreeViewState treeViewState, string[] filterTagNames)
+      public GameplayTagTreeViewBase(TreeViewState<int> treeViewState, GameplayTagFilter tagFilter)
          : base(treeViewState)
       {
-         m_FilterTagNames = filterTagNames;
+         m_TagFilter = tagFilter;
          m_SearchField = new SearchField();
          showAlternatingRowBackgrounds = true;
 
@@ -96,22 +97,26 @@ namespace BandoWare.GameplayTags.Editor
          return GUILayout.Button(text, s_Styles.ToolbarButton, GUILayout.ExpandWidth(false));
       }
 
-      protected override bool DoesItemMatchSearch(TreeViewItem item, string search)
+      protected override bool DoesItemMatchSearch(TreeViewItem<int> item, string search)
       {
          GameplayTagTreeViewItem tagItem = item as GameplayTagTreeViewItem;
-         return tagItem.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
+         return tagItem?.DisplayName.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0;
       }
 
-      protected override TreeViewItem BuildRoot()
+      protected override TreeViewItem<int> BuildRoot()
       {
-         TreeViewItem root = new(-2, -1, "<Root>");
+         TreeViewItem<int> root = new(-2, -1, "<Root>");
          m_IsEmpty = true;
 
-         List<TreeViewItem> items = new();
+         List<TreeViewItem<int>> items = new();
 
-         foreach (GameplayTag tag in GameplayTagManager.GetAllTagsFiltered(m_FilterTagNames))
+         // Create a new tag filter which forces parent tags to be included,
+         // so they can be displayed in the tree but are not selectable (see "IsDisabledFilterTag()").  
+         GameplayTagFilter parentIncludingTagFilter = new(m_TagFilter, false);
+
+         foreach (GameplayTag tag in GameplayTagManager.GetAllTagsFiltered(parentIncludingTagFilter))
          {
-            if (tag.Name.StartsWith("Test.") || tag.Name.Equals("Test"))
+            if (GameplayTagManager.IsTagForTestingOnly(tag.Name))
                continue;
 
             items.Add(new GameplayTagTreeViewItem(tag.RuntimeIndex, tag));
@@ -119,12 +124,32 @@ namespace BandoWare.GameplayTags.Editor
          }
 
          SetupParentsAndChildrenFromDepths(root, items);
+
+         // Filter tags should start expanded
+         if (m_TagFilter.HasFilterTags)
+         {
+            foreach (GameplayTag filterTag in m_TagFilter.FilterTags)
+            {
+               SetExpanded(filterTag.RuntimeIndex, true);
+            }
+         }
+
          return root;
       }
 
       protected GameplayTagTreeViewItem FindItem(int runtimeTagIndex)
       {
          return FindItem(runtimeTagIndex, rootItem) as GameplayTagTreeViewItem;
+      }
+
+      /// <summary>
+      /// Whether a tag should be disabled (not selectable), because it is just displayed parent tag which itself is filtered out.
+      /// </summary>
+      protected bool IsDisabledFilterTag(GameplayTag tag)
+      {
+         return m_TagFilter.HasFilterTags
+            && m_TagFilter.ChildTagsOnly
+            && m_TagFilter.FilterTags.Contains(tag);
       }
 
       protected class Styles

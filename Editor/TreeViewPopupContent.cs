@@ -15,9 +15,9 @@ namespace BandoWare.GameplayTags.Editor
 
    public class TreeViewPopupContent : PopupWindowContent
    {
-      public abstract class TreeView : UnityEditor.IMGUI.Controls.TreeView
+      public abstract class TreeView : TreeView<int>
       {
-         public TreeView(TreeViewState state) : base(state)
+         public TreeView(TreeViewState<int> state) : base(state)
          {
          }
 

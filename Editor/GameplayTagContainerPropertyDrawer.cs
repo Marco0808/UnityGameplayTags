@@ -18,7 +18,7 @@ namespace BandoWare.GameplayTags.Editor
 
       public GameplayTagContainerPropertyDrawer()
       {
-         s_EditTagsContent = new GUIContent("Edit Tags...", "Edit tags in a popup window.");
+         s_EditTagsContent = new GUIContent("Edit Tags", "Edit tags in a popup window.");
       }
 
       public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
@@ -53,8 +53,8 @@ namespace BandoWare.GameplayTags.Editor
          }
          if (GUI.Button(editButtonRect, s_EditTagsContent, EditorStyles.popup))
          {
-            string[] filterTagNames = GameplayTagFilterAttribute.GetFilterTagNamesFromField(fieldInfo);
-            GameplayTagContainerTreeView tagTreeView = new(new TreeViewState(), filterTagNames, explicitTagsProperty);
+            GameplayTagFilter tagFilter = GameplayTagEditorUtility.GetTagFilterFromField(fieldInfo, property);
+            GameplayTagContainerTreeView tagTreeView = new(new TreeViewState<int>(), tagFilter, explicitTagsProperty);
             Rect activatorRect = editButtonRect;
             activatorRect.x = editButtonRect.xMax;
             activatorRect.y = editButtonRect.yMin;

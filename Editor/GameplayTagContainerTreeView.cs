@@ -10,8 +10,8 @@ namespace BandoWare.GameplayTags.Editor
       private static GUIContent s_TempContent = new();
       private SerializedProperty m_ExplicitTagsProperty;
 
-      public GameplayTagContainerTreeView(TreeViewState treeViewState, string[] filterTagNames, SerializedProperty explicitTagsProperty)
-      : base(treeViewState, filterTagNames)
+      public GameplayTagContainerTreeView(TreeViewState<int> treeViewState, GameplayTagFilter tagFilter, SerializedProperty explicitTagsProperty)
+      : base(treeViewState, tagFilter)
       {
          m_ExplicitTagsProperty = explicitTagsProperty;
          m_ExplicitTagsProperty.serializedObject.Update();
@@ -43,7 +43,11 @@ namespace BandoWare.GameplayTags.Editor
             s_TempContent.tooltip = item.Tag.Description;
 
             EditorGUI.BeginChangeCheck();
+
+            // Disable the toggle if this is just a parent tag which itself is filtered out
+            EditorGUI.BeginDisabledGroup(IsDisabledFilterTag(item.Tag));
             bool added = EditorGUI.ToggleLeft(rect, s_TempContent, item.IsIncluded);
+            EditorGUI.EndDisabledGroup();
 
             if (EditorGUI.EndChangeCheck())
             {
@@ -75,7 +79,7 @@ namespace BandoWare.GameplayTags.Editor
 
       private unsafe void UpdateIncludedTags()
       {
-         foreach (TreeViewItem row in GetRows())
+         foreach (TreeViewItem<int> row in GetRows())
          {
             if (row is GameplayTagTreeViewItem item)
             {

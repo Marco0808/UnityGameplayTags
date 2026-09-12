@@ -9,21 +9,20 @@ namespace BandoWare.GameplayTags.Editor
    {
       private static GUIContent s_TempContent = new();
       private Action m_OnSelectionChange;
-      private SerializedProperty m_TagNameProperty;
+      private GameplayTagField m_TagField;
 
-      public GameplayTagTreeView(TreeViewState treeViewState, string[] filterTagNames, SerializedProperty tagProperty, Action onSelectionChange)
-      : base(treeViewState, filterTagNames)
+      public GameplayTagTreeView(TreeViewState<int> treeViewState, GameplayTagFilter tagFilter, GameplayTagField tagField, Action onSelectionChange)
+         : base(treeViewState, tagFilter)
       {
          m_OnSelectionChange = onSelectionChange;
-         m_TagNameProperty = tagProperty.FindPropertyRelative("m_Name");
-         m_TagNameProperty.serializedObject.Update();
+         m_TagField = tagField;
 
-         GameplayTag tag = GameplayTagManager.RequestTag(m_TagNameProperty.stringValue);
+         GameplayTag tag = m_TagField.value;
          if (tag != GameplayTag.None)
          {
             GameplayTagTreeViewItem item = FindItem(tag.RuntimeIndex);
             if (item != null)
-               SetSelection(new int[] { item.id });
+               SetSelection(new int[] {item.id});
 
             while (item != null)
             {
@@ -35,14 +34,13 @@ namespace BandoWare.GameplayTags.Editor
 
       protected override void OnToolbarGUI()
       {
-         if (ToolbarButton("Reset"))
+         if (ToolbarButton("Clear"))
          {
-            m_TagNameProperty.stringValue = null;
-            m_TagNameProperty.serializedObject.ApplyModifiedProperties();
+            m_TagField.value = GameplayTag.None;
          }
       }
 
-      protected override bool CanMultiSelect(TreeViewItem item)
+      protected override bool CanMultiSelect(TreeViewItem<int> item)
       {
          return false;
       }
@@ -63,9 +61,7 @@ namespace BandoWare.GameplayTags.Editor
          {
             if (GUI.Button(rect, args.label, EditorStyles.label))
             {
-               m_TagNameProperty.stringValue = null;
-               m_TagNameProperty.serializedObject.ApplyModifiedProperties();
-
+               m_TagField.value = GameplayTag.None;
                m_OnSelectionChange?.Invoke();
             }
 
@@ -74,20 +70,21 @@ namespace BandoWare.GameplayTags.Editor
 
          GameplayTagTreeViewItem item = args.item as GameplayTagTreeViewItem;
 
-         EditorGUI.BeginChangeCheck();
+         // Disable the row button if this is just a parent tag which itself is filtered out
+         EditorGUI.BeginDisabledGroup(IsDisabledFilterTag(item.Tag));
 
          s_TempContent.text = hasSearch ? item.DisplayName : args.label;
          s_TempContent.tooltip = item.Tag.Description;
          if (GUI.Button(rect, s_TempContent, EditorStyles.label))
          {
-            m_TagNameProperty.stringValue = item.Tag.Name;
-            m_TagNameProperty.serializedObject.ApplyModifiedProperties();
-
+            m_TagField.value = item.Tag;
             m_OnSelectionChange?.Invoke();
          }
+
+         EditorGUI.EndDisabledGroup();
       }
 
-      private bool IsItemOrAnyChildSelected(TreeViewItem item)
+      private bool IsItemOrAnyChildSelected(TreeViewItem<int> item)
       {
          if (item != null)
          {
@@ -96,7 +93,7 @@ namespace BandoWare.GameplayTags.Editor
 
             if (item.children != null)
             {
-               foreach (TreeViewItem child in item.children)
+               foreach (TreeViewItem<int> child in item.children)
                {
                   if (IsItemOrAnyChildSelected(child))
                   {

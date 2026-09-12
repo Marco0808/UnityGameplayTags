@@ -1,47 +1,33 @@
 using System;
 
-#if UNITY_EDITOR
-using System.Collections.Generic;
-using System.Reflection;
-#endif
-
 namespace BandoWare.GameplayTags
 {
-   [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, AllowMultiple = false)]
+   /// <summary>
+   /// Can be used on <see cref="GameplayTag"/> or <see cref="GameplayTagContainer"/> fields and properties or on <see cref="TypedGameplayTagBase"/> derived classes.
+   /// </summary>
+   [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property | AttributeTargets.Class, AllowMultiple = false)]
    public class GameplayTagFilterAttribute : Attribute
    {
-      public string[] FilterTagNames { get; }
-
-      public GameplayTagFilterAttribute(params string[] filterTagNames)
-      {
-         FilterTagNames = filterTagNames;
-      }
+      public GameplayTagFilter TagFilter { get; }
 
       public GameplayTagFilterAttribute(params Type[] filterTagTypes)
       {
-#if UNITY_EDITOR
-         List<string> filterTagNames = new();
-         foreach (Type type in filterTagTypes)
-         {
-            MethodInfo method = type.GetMethod("Get", BindingFlags.Public | BindingFlags.Static);
-            if (method != null)
-            {
-               GameplayTag tag = (GameplayTag)method.Invoke(null, null);
-               if (tag != GameplayTag.None)
-               {
-                  filterTagNames.Add(tag.Name);
-               }
-            }
-         }
-         FilterTagNames = filterTagNames.ToArray();
-#endif
+         TagFilter = new GameplayTagFilter(filterTagTypes);
       }
 
-#if UNITY_EDITOR
-      public static string[] GetFilterTagNamesFromField(FieldInfo fieldInfo)
+      public GameplayTagFilterAttribute(bool childTagsOnly, params Type[] filterTagTypes)
       {
-         return fieldInfo?.GetCustomAttribute<GameplayTagFilterAttribute>(false)?.FilterTagNames;
+         TagFilter = new GameplayTagFilter(filterTagTypes, childTagsOnly);
       }
-#endif
+
+      public GameplayTagFilterAttribute(params string[] filterTagNames)
+      {
+         TagFilter = new GameplayTagFilter(filterTagNames);
+      }
+
+      public GameplayTagFilterAttribute(bool childTagsOnly, params string[] filterTagNames)
+      {
+         TagFilter = new GameplayTagFilter(filterTagNames, childTagsOnly);
+      }
    }
 }
